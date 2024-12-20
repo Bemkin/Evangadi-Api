@@ -108,7 +108,7 @@ app.post('/api/login', async (req, res) => {
     }
 
     // Generate JWT token
-    const token = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, { expiresIn: '1h' });
+    const token = jwt.sign({ userId: user.user_id, email: user.email, username: user.username }, JWT_SECRET, { expiresIn: '1h' });
     res.status(200).json({ message: 'User login successful', token });
   } catch (error) {
     console.error('Login error:', error);
@@ -177,7 +177,7 @@ app.get('/api/answer/:question_id', async (req, res) => {
 });
 
 // Endpoint to fetch all questions
-app.get('/api/question', async (req, res) => {
+app.get('/api/question', authMiddleware, async (req, res) => {
   try {
     // Fetch all questions from the database
     const questions = await new Promise((resolve, reject) => {
@@ -190,13 +190,15 @@ app.get('/api/question', async (req, res) => {
       });
     });
 
-    // Return questions
+    // Return questions with unique id
     res.status(200).json({ message: 'Questions retrieved successfully', questions });
   } catch (error) {
     console.error('Error retrieving questions:', error);
     res.status(500).json({ error: 'Internal Server Error', message: 'Something went wrong' });
   }
 });
+
+
 
 // Endpoint to retrieve details of a specific question
 app.get('/api/question/:question_id', async (req, res) => {
@@ -236,23 +238,40 @@ app.get('/api/question/:question_id', async (req, res) => {
 });
 
 // Endpoint to create a new question
-app.post('/api/question', async (req, res) => {
+app.post('/api/question', authMiddleware, async (req, res) => {
   const { user_id, title, body } = req.body;
 
-  // Validate required fields
   if (!user_id || !title || !body) {
     return res.status(400).json({ error: 'Bad Request', message: 'Please provide user_id, title, and body' });
   }
 
   try {
-    // Insert the new question into the database
-    db.query('INSERT INTO questiontable (user_id, title, body) VALUES (?, ?, ?)',
+    const username = await new Promise((resolve, reject) => {
+      db.query('SELECT username FROM usertable WHERE user_id = ?', [user_id], (err, results) => {
+        if (err) {
+          console.error('Database query error:', err);
+          return reject(err);
+        }
+        if (results.length === 0) {
+          return resolve(null);
+        }
+        console.log('User found:', results[0].username); // Debugging: Log fetched username
+        resolve(results[0].username);
+      });
+    });
+
+    if (!username) {
+      return res.status(404).json({ error: 'Not Found', message: 'User not found' });
+    }
+
+    db.query('INSERT INTO questiontable (user_id, title, body) VALUES (?, ?,  ?)',
       [user_id, title, body],
       (err, results) => {
         if (err) {
           console.error('Database insertion error:', err);
           return res.status(500).json({ error: 'Internal Server Error', message: 'Failed to create question' });
         }
+        console.log('Question created successfully:', results.insertId); // Debugging: Log the inserted question ID
         res.status(201).json({ message: 'Question created successfully', question_id: results.insertId });
       });
   } catch (error) {
@@ -261,14 +280,35 @@ app.post('/api/question', async (req, res) => {
   }
 });
 
+
+
+
 // Protect the /api/checkUser endpoint with the authentication middleware
 app.get('/api/checkUser', authMiddleware, (req, res) => {
-  res.status(200).json({
-    message: 'Valid user',
-    username: req.user.email, // Adjust based on your token payload
-    userid: req.user.userId // Adjust based on your token payload
+  const { userId } = req.user; // Assuming userId is in the token payload
+
+  // Fetch the user details from the database
+  db.query('SELECT username FROM usertable WHERE user_id = ?', [userId], (err, results) => { // Adjust column name based on your schema
+    if (err) {
+      console.error('Database query error:', err);
+      return res.status(500).json({ error: 'Internal Server Error', message: 'Something went wrong' });
+    }
+
+    if (results.length === 0) {
+      return res.status(404).json({ error: 'Not Found', message: 'User not found' });
+    }
+
+    const { username } = results[0];
+    console.log('Fetched username:', username); // Debugging: Log fetched username
+
+    res.status(200).json({
+      message: 'Valid user',
+      username, // Return the actual username
+      userId // Return the user ID
+    });
   });
 });
+
 
 // Load SSL/TLS certificates
 const privateKey = fs.readFileSync('server.key', 'utf8');

@@ -17,6 +17,7 @@ const authMiddleware = (req, res, next) => {
     }
 
     req.user = decoded; // Attach decoded token payload to request object
+    console.log('Decoded token:', decoded); // Debugging: Log decoded token
     next(); // Proceed to the next middleware or route handler
   });
 };
