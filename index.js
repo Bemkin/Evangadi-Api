@@ -1,6 +1,6 @@
 const express = require('express');
-const https = require('https');
-const fs = require('fs');
+const http = require('http');
+
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const db = require('./db');
@@ -311,13 +311,11 @@ app.get('/api/checkUser', authMiddleware, (req, res) => {
 
 
 // Load SSL/TLS certificates
-const privateKey = fs.readFileSync('server.key', 'utf8');
-const certificate = fs.readFileSync('server.cert', 'utf8');
-const credentials = { key: privateKey, cert: certificate };
+
 
 // Create HTTPS server
-const httpsServer = https.createServer(credentials, app);
+const httpServer = http.createServer( app);
 const PORT = process.env.PORT || 3000;
-httpsServer.listen(PORT, () => {
-  console.log(`HTTPS Server running on port ${PORT}`);
+httpServer.listen(PORT, () => {
+  console.log(`HTTP Server running on port ${PORT}`);
 });
